@@ -1,0 +1,2102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PinPoint — Bowling Score &amp; Analytics Tracker</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0b1120;
+      color: #e2e8f0;
+    }
+    .pin-btn {
+      transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease, opacity 0.14s ease, box-shadow 0.14s ease;
+      user-select: none;
+    }
+    .pin-btn:active:not(:disabled) {
+      transform: scale(0.93);
+    }
+    .pin-standing {
+      background: radial-gradient(circle at 35% 30%, #ffffff 0%, #f1f5f9 65%, #cbd5e1 100%);
+      color: #0f172a;
+      border: 2px solid #ef4444;
+      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15), inset 0 -3px 0 rgba(239, 68, 68, 0.28);
+    }
+    .pin-knocked {
+      background: #1e293b;
+      color: #64748b;
+      border: 2px dashed #334155;
+      opacity: 0.48;
+      box-shadow: none;
+    }
+    .pin-disabled {
+      background: #0f172a;
+      color: #334155;
+      border: 2px solid #1e293b;
+      opacity: 0.28;
+      cursor: not-allowed;
+    }
+    .split-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1.5px solid #ef4444;
+      border-radius: 9999px;
+      width: 18px;
+      height: 18px;
+      font-size: 11px;
+      line-height: 1;
+      color: #fca5a5;
+    }
+    /* Custom subtle scrollbar */
+    ::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Navigation -->
+  <header class="sticky top-0 z-30 bg-slate-950/90 backdrop-blur border-b border-slate-800">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-rose-500 flex items-center justify-center text-slate-950 font-extrabold shadow-lg shadow-amber-500/20 shrink-0">
+          10
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-base sm:text-lg font-bold text-white tracking-tight truncate">PinPoint Bowling</h1>
+          <p class="text-xs text-slate-400 hidden sm:block">Frame-by-Frame Scorekeeper &amp; Pin Analytics</p>
+        </div>
+      </div>
+
+      <!-- Primary View Tabs -->
+      <nav class="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800" aria-label="Main views">
+        <button id="tab-scorekeeper" data-tab="scorekeeper" class="nav-tab px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors bg-amber-500 text-slate-950">
+          Scorekeeper
+        </button>
+        <button id="tab-series" data-tab="series" class="nav-tab px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors text-slate-300 hover:text-white">
+          Series Log
+        </button>
+        <button id="tab-trends" data-tab="trends" class="nav-tab px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors text-slate-300 hover:text-white">
+          Stats &amp; Trends
+        </button>
+      </nav>
+
+      <!-- Data Actions -->
+      <div class="flex items-center gap-2 shrink-0">
+        <button id="btn-open-data-modal" class="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition-colors" title="Manage Data &amp; Sample Reset" aria-label="Manage Data">
+          <i data-lucide="database" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Toast Banner -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-5">
+
+    <!-- ==================== VIEW 1: SCOREKEEPER ==================== -->
+    <section id="view-scorekeeper" class="space-y-5">
+      <!-- Series & Game Selector Bar -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-3">
+          <div>
+            <label for="active-series-select" class="block text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Active Series</label>
+            <div class="flex items-center gap-2">
+              <select id="active-series-select" class="bg-slate-950 border border-slate-700 text-slate-100 text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 max-w-[240px] sm:max-w-xs"></select>
+              <button id="btn-new-series-modal" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs sm:text-sm transition-colors shrink-0">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>New Series</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Games in Series + Series Total -->
+        <div class="flex flex-wrap items-center justify-between lg:justify-end gap-3">
+          <div id="series-game-tabs" class="flex flex-wrap items-center gap-1.5"></div>
+          <div class="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2">
+            <div>
+              <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Series Total</div>
+              <div id="sk-series-total" class="text-base font-bold text-amber-400">0</div>
+            </div>
+            <div class="h-6 w-px bg-slate-800"></div>
+            <div>
+              <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Series Avg</div>
+              <div id="sk-series-avg" class="text-base font-bold text-slate-200">0.0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 10-Frame Scoreboard -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <h2 id="sk-game-title" class="text-sm sm:text-base font-bold text-white">Game 1</h2>
+            <span id="sk-game-status-badge" class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">In Progress</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+            <span>Max Possible: <strong id="sk-max-possible" class="text-slate-200">300</strong></span>
+            <span>Strikes: <strong id="sk-game-strikes" class="text-emerald-400">0</strong></span>
+            <span>Spares: <strong id="sk-game-spares" class="text-sky-400">0</strong></span>
+            <span>Splits: <strong id="sk-game-splits" class="text-rose-400">0</strong></span>
+          </div>
+        </div>
+
+        <!-- Scoreboard Grid -->
+        <div class="overflow-x-auto pb-1">
+          <div id="scoreboard-grid" class="grid grid-cols-10 min-w-[680px] border border-slate-700 rounded-xl overflow-hidden bg-slate-950"></div>
+        </div>
+        <p class="text-[11px] text-slate-500">Tip: Click any frame on the scoreboard to jump to it or edit its rolls. Red circle indicates a split leave.</p>
+      </div>
+
+      <!-- Interactive Pin Deck & Roll Logger -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- Left: 10-Pin Deck -->
+        <div class="lg:col-span-7 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 id="roll-prompt-title" class="text-base font-bold text-white">Frame 1 — Roll 1</h3>
+              <p id="roll-prompt-subtitle" class="text-xs text-slate-400">Tap the pins left standing (or use quick actions).</p>
+            </div>
+            <div class="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1 text-xs">
+              <button id="mode-tap-left" class="px-2.5 py-1 rounded-md font-medium bg-slate-800 text-white transition-colors">Tap Left</button>
+              <button id="mode-tap-knocked" class="px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-white transition-colors">Tap Knocked</button>
+            </div>
+          </div>
+
+          <!-- Bowling Lane Pin Triangle -->
+          <div class="bg-gradient-to-b from-slate-950 via-slate-900 to-amber-950/20 border border-slate-800 rounded-2xl py-6 px-4 flex flex-col items-center justify-center space-y-3">
+            <!-- Row 4: 7, 8, 9, 10 -->
+            <div class="flex items-center justify-center gap-3 sm:gap-5">
+              <button type="button" data-pin="7" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">7</button>
+              <button type="button" data-pin="8" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">8</button>
+              <button type="button" data-pin="9" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">9</button>
+              <button type="button" data-pin="10" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">10</button>
+            </div>
+            <!-- Row 3: 4, 5, 6 -->
+            <div class="flex items-center justify-center gap-3 sm:gap-5">
+              <button type="button" data-pin="4" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">4</button>
+              <button type="button" data-pin="5" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">5</button>
+              <button type="button" data-pin="6" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">6</button>
+            </div>
+            <!-- Row 2: 2, 3 -->
+            <div class="flex items-center justify-center gap-3 sm:gap-5">
+              <button type="button" data-pin="2" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">2</button>
+              <button type="button" data-pin="3" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">3</button>
+            </div>
+            <!-- Row 1: 1 -->
+            <div class="flex items-center justify-center">
+              <button type="button" data-pin="1" class="pin-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-sm sm:text-base flex items-center justify-center">1</button>
+            </div>
+          </div>
+
+          <!-- Live Selection Readout & Primary Submit -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div class="text-sm text-slate-300">
+              Knocked: <strong id="preview-knocked-count" class="text-white text-base">10</strong>
+              <span class="mx-2 text-slate-600">|</span>
+              Left: <strong id="preview-left-pins" class="text-amber-400">None (Strike)</strong>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btn-undo-roll" class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-medium transition-colors inline-flex items-center gap-1.5">
+                <i data-lucide="undo-2" class="w-4 h-4"></i>
+                <span>Undo</span>
+              </button>
+              <button id="btn-record-roll" class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold transition-colors inline-flex items-center gap-1.5 shadow-lg shadow-emerald-500/20">
+                <i data-lucide="check" class="w-4 h-4"></i>
+                <span>Record Roll</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Quick Actions & Common Leaves -->
+        <div class="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between space-y-5">
+          <div class="space-y-4">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-400">Quick Entry</h3>
+
+            <!-- One-Tap Result Buttons -->
+            <div class="grid grid-cols-3 gap-2.5">
+              <button id="btn-quick-strike" class="py-3 px-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 hover:bg-emerald-500/25 text-emerald-300 font-bold text-sm transition-colors">
+                Strike (X)
+              </button>
+              <button id="btn-quick-spare" class="py-3 px-3 rounded-xl bg-sky-500/15 border border-sky-500/40 hover:bg-sky-500/25 text-sky-300 font-bold text-sm transition-colors">
+                Spare (/)
+              </button>
+              <button id="btn-quick-gutter" class="py-3 px-3 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-colors">
+                Gutter (-)
+              </button>
+            </div>
+
+            <!-- Common Leaves Presets -->
+            <div id="common-leaves-section" class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-400">Common Roll 1 Leaves (1-Tap)</span>
+                <span class="text-[11px] text-slate-500">Sets &amp; logs Roll 1</span>
+              </div>
+              <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                <button data-leave="10" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-xs font-medium text-slate-200 transition-colors">10-Pin</button>
+                <button data-leave="7" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-xs font-medium text-slate-200 transition-colors">7-Pin</button>
+                <button data-leave="4" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-xs font-medium text-slate-200 transition-colors">4-Pin</button>
+                <button data-leave="5" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-xs font-medium text-slate-200 transition-colors">5-Pin</button>
+                <button data-leave="2,4,5,8" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-xs font-medium text-slate-200 transition-colors">Bucket</button>
+                <button data-leave="3,6,10" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-xs font-medium text-slate-200 transition-colors">3-6-10</button>
+                <button data-leave="7,10" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-rose-500/30 hover:border-rose-500/60 text-xs font-medium text-rose-300 transition-colors">7-10 Split</button>
+                <button data-leave="3,10" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-rose-500/30 hover:border-rose-500/60 text-xs font-medium text-rose-300 transition-colors">3-10 Split</button>
+                <button data-leave="4,7,10" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-rose-500/30 hover:border-rose-500/60 text-xs font-medium text-rose-300 transition-colors">4-7-10</button>
+                <button data-leave="4,6" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-rose-500/30 hover:border-rose-500/60 text-xs font-medium text-rose-300 transition-colors">4-6 Split</button>
+                <button data-leave="6,7,10" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-rose-500/30 hover:border-rose-500/60 text-xs font-medium text-rose-300 transition-colors">6-7-10</button>
+                <button data-leave="1,2,4" class="preset-leave-btn py-2 px-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-xs font-medium text-slate-200 transition-colors">1-2-4</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Game Actions -->
+          <div class="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+            <button id="btn-clear-game" class="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-rose-500/50 text-xs font-medium text-slate-400 hover:text-rose-300 transition-colors">
+              Clear Current Game
+            </button>
+            <button id="btn-add-game" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-colors inline-flex items-center gap-1.5">
+              <i data-lucide="plus-circle" class="w-4 h-4 text-amber-400"></i>
+              <span>Add Game to Series</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: SERIES LOG ==================== -->
+    <section id="view-series" class="hidden space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold text-white">Series History</h2>
+          <p class="text-xs sm:text-sm text-slate-400">Review every series game-by-game or open any game to edit frames.</p>
+        </div>
+        <button id="btn-new-series-log" class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition-colors">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>Start New Series</span>
+        </button>
+      </div>
+
+      <div id="series-list-container" class="space-y-4"></div>
+    </section>
+
+    <!-- ==================== VIEW 3: STATS & TRENDS ==================== -->
+    <section id="view-trends" class="hidden space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold text-white">Statistics &amp; Pin Trends</h2>
+          <p class="text-xs sm:text-sm text-slate-400">Track strike, spare, and split rates alongside your most frequently left pins.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="stats-scope-select" class="text-xs text-slate-400 font-medium">Scope:</label>
+          <select id="stats-scope-select" class="bg-slate-900 border border-slate-700 text-slate-100 text-xs sm:text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500">
+            <option value="all">All Recorded Series</option>
+            <option value="last3">Last 3 Series</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- KPI Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Game Average</div>
+          <div id="stat-avg" class="text-2xl font-extrabold text-white mt-1">0.0</div>
+          <div id="stat-games-count" class="text-[11px] text-slate-500 mt-0.5">0 games</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">High Game / Series</div>
+          <div id="stat-highs" class="text-2xl font-extrabold text-amber-400 mt-1">0 / 0</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Best single &amp; series</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Strike %</div>
+          <div id="stat-strike-pct" class="text-2xl font-extrabold text-emerald-400 mt-1">0.0%</div>
+          <div id="stat-strike-sub" class="text-[11px] text-slate-500 mt-0.5">0 / 0 frames</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Spare %</div>
+          <div id="stat-spare-pct" class="text-2xl font-extrabold text-sky-400 mt-1">0.0%</div>
+          <div id="stat-spare-sub" class="text-[11px] text-slate-500 mt-0.5">0 / 0 opportunities</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Split %</div>
+          <div id="stat-split-pct" class="text-2xl font-extrabold text-rose-400 mt-1">0.0%</div>
+          <div id="stat-split-sub" class="text-[11px] text-slate-500 mt-0.5">0% converted</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Single-Pin Spare</div>
+          <div id="stat-single-pin-pct" class="text-2xl font-extrabold text-violet-400 mt-1">0.0%</div>
+          <div id="stat-first-ball" class="text-[11px] text-slate-500 mt-0.5">1st ball avg: 0.0</div>
+        </div>
+      </div>
+
+      <!-- Pin Leave Trends Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- Pin Leave Heatmap -->
+        <div class="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <div>
+            <h3 class="text-base font-bold text-white">Pin Leave Heatmap</h3>
+            <p class="text-xs text-slate-400">How often each pin is left standing after your first ball.</p>
+          </div>
+
+          <div id="heatmap-pin-deck" class="bg-slate-950 border border-slate-800 rounded-2xl py-6 px-4 flex flex-col items-center space-y-3">
+            <!-- Populated by JS -->
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-slate-400 px-1">
+            <span>Rarely left</span>
+            <div class="flex items-center gap-1">
+              <span class="w-4 h-2.5 rounded bg-slate-800 inline-block"></span>
+              <span class="w-4 h-2.5 rounded bg-amber-500/40 inline-block"></span>
+              <span class="w-4 h-2.5 rounded bg-orange-500/70 inline-block"></span>
+              <span class="w-4 h-2.5 rounded bg-rose-500 inline-block"></span>
+            </div>
+            <span>Most left</span>
+          </div>
+        </div>
+
+        <!-- Top Most-Left Pins & Specific Leaves -->
+        <div class="lg:col-span-7 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-5">
+          <div>
+            <h3 class="text-base font-bold text-white">Most Frequently Left Pins &amp; Combinations</h3>
+            <p class="text-xs text-slate-400">Individual pin leave rates and your spare conversion on common leaves.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Individual Pins Left Most</h4>
+              <div id="top-individual-pins" class="space-y-2.5"></div>
+            </div>
+            <div>
+              <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Top Specific Leaves &amp; Conversion</h4>
+              <div id="top-leave-combos" class="space-y-2.5"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white">Score Trend (Games &amp; Rolling Avg)</h3>
+          </div>
+          <div class="relative h-72">
+            <canvas id="chart-scores"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white">Strike, Spare &amp; Split % by Series</h3>
+          </div>
+          <div class="relative h-72">
+            <canvas id="chart-percentages"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== MODALS ==================== -->
+  <!-- New Series Modal -->
+  <div id="modal-new-series" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-white">Start New Series</h3>
+        <button id="close-new-series-modal" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="form-new-series" class="space-y-3.5">
+        <div>
+          <label for="input-series-title" class="block text-xs font-semibold text-slate-300 mb-1">Series Name / League</label>
+          <input id="input-series-title" type="text" required placeholder="e.g., Tuesday Night League" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="input-series-date" class="block text-xs font-semibold text-slate-300 mb-1">Date</label>
+            <input id="input-series-date" type="date" required class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500" />
+          </div>
+          <div>
+            <label for="input-series-games" class="block text-xs font-semibold text-slate-300 mb-1">Games in Series</label>
+            <select id="input-series-games" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500">
+              <option value="3" selected>3 Games (Standard)</option>
+              <option value="2">2 Games</option>
+              <option value="4">4 Games</option>
+              <option value="1">1 Game</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label for="input-series-alley" class="block text-xs font-semibold text-slate-300 mb-1">Bowling Alley (Optional)</label>
+          <input id="input-series-alley" type="text" placeholder="e.g., Pinheads Lanes" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500" />
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" id="cancel-new-series" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-medium text-slate-200">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-sm font-bold text-slate-950">Create Series</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Data Management Modal -->
+  <div id="modal-data" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-white">Manage Bowling Data</h3>
+        <button id="close-data-modal" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <p class="text-xs text-slate-400">Your scores are saved automatically in your browser. You can export a backup, restore sample data, or clear everything to start fresh.</p>
+      <div class="space-y-2.5">
+        <button id="btn-export-json" class="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-white flex items-center justify-center gap-2 transition-colors">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Export All Data (JSON)</span>
+        </button>
+        <label class="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-white flex items-center justify-center gap-2 cursor-pointer transition-colors">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span>Import Data (JSON)</span>
+          <input id="input-import-json" type="file" accept=".json,application/json" class="hidden" />
+        </label>
+        <button id="btn-restore-sample" class="w-full py-2.5 px-4 rounded-xl bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 text-sm font-semibold text-amber-300 flex items-center justify-center gap-2 transition-colors">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>Load Sample Season Data</span>
+        </button>
+        <button id="btn-wipe-all" class="w-full py-2.5 px-4 rounded-xl bg-rose-500/15 border border-rose-500/40 hover:bg-rose-500/25 text-sm font-semibold text-rose-300 flex items-center justify-center gap-2 transition-colors">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Clear All Data &amp; Start Fresh</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const STORAGE_KEY = 'pinpoint_bowling_v1';
+      const ALL_PINS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+      // USBC 10-pin adjacency graph for accurate split detection
+      const PIN_ADJACENCY = {
+        1: [2, 3],
+        2: [1, 3, 4, 5],
+        3: [1, 2, 5, 6],
+        4: [2, 5, 7, 8],
+        5: [2, 3, 4, 6, 8, 9],
+        6: [3, 5, 9, 10],
+        7: [4, 8],
+        8: [4, 5, 7, 9],
+        9: [5, 6, 8, 10],
+        10: [6, 9]
+      };
+
+      function isSplitLeave(standingPins) {
+        if (!standingPins || standingPins.length < 2) return false;
+        if (standingPins.includes(1)) return false; // Headpin standing is never a split
+        const standingSet = new Set(standingPins);
+        const visited = new Set();
+        const queue = [standingPins[0]];
+        visited.add(standingPins[0]);
+
+        while (queue.length > 0) {
+          const curr = queue.shift();
+          const neighbors = PIN_ADJACENCY[curr] || [];
+          for (const n of neighbors) {
+            if (standingSet.has(n) && !visited.has(n)) {
+              visited.add(n);
+              queue.push(n);
+            }
+          }
+        }
+        return visited.size < standingPins.length;
+      }
+
+      function createEmptyGame(gameNumber) {
+        return {
+          id: 'g_' + Math.random().toString(36).slice(2, 10),
+          gameNumber: gameNumber,
+          frames: Array.from({ length: 10 }, () => ({ rolls: [] }))
+          // Each roll: { knocked: number[], left: number[], count: number }
+        };
+      }
+
+      // Helper to build a roll object from pins left standing
+      function makeRollFromLeft(standingBefore, pinsLeftAfter) {
+        const left = pinsLeftAfter.slice().sort((a, b) => a - b);
+        const knocked = standingBefore.filter(p => !left.includes(p));
+        return { knocked, left, count: knocked.length };
+      }
+
+      // Helper to build sample games concisely
+      function buildSampleGame(gameNumber, frameSpecs) {
+        const game = createEmptyGame(gameNumber);
+        frameSpecs.forEach((spec, idx) => {
+          const frame = game.frames[idx];
+          if (idx < 9) {
+            if (spec === 'X') {
+              frame.rolls.push(makeRollFromLeft(ALL_PINS, []));
+            } else {
+              const [left1, left2] = spec;
+              const r1 = makeRollFromLeft(ALL_PINS, left1);
+              const r2 = makeRollFromLeft(left1, left2);
+              frame.rolls.push(r1, r2);
+            }
+          } else {
+            // 10th frame spec is array of pin-left arrays, with 'X' meaning [] on fresh rack
+            let rack = ALL_PINS;
+            spec.forEach((s, rIdx) => {
+              const left = s === 'X' ? [] : s;
+              const roll = makeRollFromLeft(rack, left);
+              frame.rolls.push(roll);
+              if (left.length === 0) {
+                rack = ALL_PINS;
+              } else {
+                rack = left;
+              }
+            });
+          }
+        });
+        return game;
+      }
+
+      function getSampleData() {
+        return {
+          series: [
+            {
+              id: 's_1',
+              title: 'Tuesday Night League',
+              date: '2026-11-03',
+              alley: 'Simonton Lanes',
+              games: [
+                buildSampleGame(1, [
+                  [[10], []], 'X', [[7], []], [[4, 7], [7]], 'X', [[10], []], [[7, 10], [10]], 'X', [[2, 4, 5], []], ['X', [10], []]
+                ]),
+                buildSampleGame(2, [
+                  'X', 'X', [[10], [10]], [[6, 10], []], 'X', [[3, 10], []], [[7], []], 'X', 'X', [[10], [], [9]]
+                ]),
+                buildSampleGame(3, [
+                  [[4], []], 'X', 'X', [[10], []], [[2, 4, 5, 8], [8]], 'X', [[7], []], 'X', [[10], []], ['X', 'X', [10]]
+                ])
+              ]
+            },
+            {
+              id: 's_2',
+              title: 'Weekend Practice',
+              date: '2026-11-10',
+              alley: 'Strike Zone',
+              games: [
+                buildSampleGame(1, [
+                  [[10], []], [[7], []], 'X', [[4, 6], [6]], 'X', [[10], []], 'X', [[3, 6, 10], []], 'X', ['X', [7], []]
+                ]),
+                buildSampleGame(2, [
+                  'X', [[10], []], 'X', 'X', [[7], []], [[4, 7, 10], [7, 10]], 'X', [[10], []], [[2, 5], []], ['X', 'X', 'X']
+                ]),
+                buildSampleGame(3, [
+                  [[7], []], [[10], [10]], 'X', 'X', [[4], []], 'X', [[10], []], [[3, 10], [3]], 'X', [[7], [], 'X']
+                ])
+              ]
+            },
+            {
+              id: 's_3',
+              title: 'Tuesday Night League',
+              date: '2026-11-17',
+              alley: 'Simonton Lanes',
+              games: [
+                buildSampleGame(1, [
+                  'X', 'X', [[10], []], 'X', [[7], []], 'X', 'X', [[10], []], [[4, 7], []], ['X', [10], []]
+                ]),
+                buildSampleGame(2, [
+                  [[10], []], 'X', [[2, 4, 5], []], 'X', 'X', [[7, 10], [7]], 'X', [[10], []], 'X', ['X', 'X', [7]]
+                ]),
+                buildSampleGame(3, [
+                  'X', 'X', 'X', [[10], []], [[7], []], 'X', [[6, 10], []], 'X', [[10], []], ['X', [4], []]
+                ])
+              ]
+            },
+            {
+              id: 's_4',
+              title: 'Tuesday Night League',
+              date: '2026-11-24',
+              alley: 'Simonton Lanes',
+              games: [
+                buildSampleGame(1, [
+                  'X', [[10], []], 'X', 'X', [[7], []], 'X', [[4, 5], []], 'X', 'X', ['X', [10], []]
+                ]),
+                buildSampleGame(2, [
+                  [[10], []], 'X', 'X', [[3, 10], []], 'X', [[10], []], 'X', [[7], []], 'X', ['X', 'X', [10]]
+                ]),
+                buildSampleGame(3, [
+                  'X', 'X', [[10], []], [[7], []], 'X', 'X'
+                ])
+              ]
+            }
+          ]
+        };
+      }
+
+      // ==================== STATE ====================
+      let state = {
+        series: [],
+        activeSeriesId: null,
+        activeGameId: null,
+        activeTab: 'scorekeeper',
+        selectedFrameIdx: 0,
+        tapMode: 'left', // 'left' or 'knocked'
+        pendingLeftPins: [], // pins currently toggled as LEFT standing for the active roll
+        statsScope: 'all'
+      };
+
+      let scoreChartInstance = null;
+      let pctChartInstance = null;
+
+      // ==================== STORAGE ====================
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            series: state.series,
+            activeSeriesId: state.activeSeriesId,
+            activeGameId: state.activeGameId
+          }));
+        } catch (e) {
+          // Ignore storage quota or sandbox errors
+        }
+      }
+
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.series)) {
+              state.series = parsed.series;
+              state.activeSeriesId = parsed.activeSeriesId;
+              state.activeGameId = parsed.activeGameId;
+              return;
+            }
+          }
+        } catch (e) {
+          // Fallback to sample data
+        }
+        const sample = getSampleData();
+        state.series = sample.series;
+        const latest = state.series[state.series.length - 1];
+        state.activeSeriesId = latest.id;
+        state.activeGameId = latest.games[2].id;
+        saveState();
+      }
+
+      // ==================== SCORING ENGINE ====================
+      function isGameComplete(game) {
+        const f10 = game.frames[9];
+        if (!f10 || f10.rolls.length < 2) return false;
+        const r1 = f10.rolls[0].count;
+        const r2 = f10.rolls[1].count;
+        if (r1 === 10 || r1 + r2 === 10) {
+          return f10.rolls.length === 3;
+        }
+        return f10.rolls.length === 2;
+      }
+
+      function computeGameScore(game) {
+        // Flatten all rolls with frame index for bonus lookahead
+        const allRolls = [];
+        game.frames.forEach((f, fIdx) => {
+          f.rolls.forEach((r, rIdx) => {
+            allRolls.push({ fIdx, rIdx, count: r.count });
+          });
+        });
+
+        const frameTotals = Array(10).fill(null);
+        let runningTotal = 0;
+        let rollPointer = 0;
+
+        for (let f = 0; f < 10; f++) {
+          const frame = game.frames[f];
+          if (frame.rolls.length === 0) break;
+
+          if (f < 9) {
+            const r1 = frame.rolls[0].count;
+            if (r1 === 10) {
+              // Strike: needs next 2 rolls
+              if (rollPointer + 2 < allRolls.length) {
+                runningTotal += 10 + allRolls[rollPointer + 1].count + allRolls[rollPointer + 2].count;
+                frameTotals[f] = runningTotal;
+              }
+              rollPointer += 1;
+            } else if (frame.rolls.length >= 2) {
+              const r2 = frame.rolls[1].count;
+              if (r1 + r2 === 10) {
+                // Spare: needs next 1 roll
+                if (rollPointer + 2 < allRolls.length) {
+                  runningTotal += 10 + allRolls[rollPointer + 2].count;
+                  frameTotals[f] = runningTotal;
+                }
+              } else {
+                runningTotal += r1 + r2;
+                frameTotals[f] = runningTotal;
+              }
+              rollPointer += 2;
+            } else {
+              // Frame in progress (only roll 1 bowled)
+              break;
+            }
+          } else {
+            // 10th frame
+            if (isGameComplete(game)) {
+              const sum10 = frame.rolls.reduce((acc, r) => acc + r.count, 0);
+              runningTotal += sum10;
+              frameTotals[f] = runningTotal;
+            }
+          }
+        }
+
+        // Current total (highest computed frame total, or partial if none)
+        let total = 0;
+        for (let i = 9; i >= 0; i--) {
+          if (frameTotals[i] !== null) {
+            total = frameTotals[i];
+            break;
+          }
+        }
+
+        // Max possible score calculation
+        const maxPossible = computeMaxPossible(game);
+
+        return { frameTotals, total, maxPossible, complete: isGameComplete(game) };
+      }
+
+      function computeMaxPossible(game) {
+        // Clone rolls and fill remaining frames with strikes
+        const simFrames = game.frames.map((f, idx) => {
+          const counts = f.rolls.map(r => r.count);
+          if (idx < 9) {
+            if (counts.length === 0) return [10];
+            if (counts.length === 1 && counts[0] < 10) return [counts[0], 10 - counts[0]];
+            return counts;
+          } else {
+            const res = counts.slice();
+            if (res.length === 0) return [10, 10, 10];
+            if (res.length === 1) {
+              if (res[0] === 10) return [10, 10, 10];
+              return [res[0], 10 - res[0], 10];
+            }
+            if (res.length === 2) {
+              if (res[0] === 10 || res[0] + res[1] === 10) {
+                return [res[0], res[1], 10];
+              }
+              return res;
+            }
+            return res;
+          }
+        });
+
+        const flat = [];
+        simFrames.forEach(cArr => cArr.forEach(c => flat.push(c)));
+        let total = 0;
+        let ptr = 0;
+        for (let f = 0; f < 10; f++) {
+          if (f < 9) {
+            if (flat[ptr] === 10) {
+              total += 10 + (flat[ptr + 1] || 0) + (flat[ptr + 2] || 0);
+              ptr += 1;
+            } else if ((flat[ptr] || 0) + (flat[ptr + 1] || 0) === 10) {
+              total += 10 + (flat[ptr + 2] || 0);
+              ptr += 2;
+            } else {
+              total += (flat[ptr] || 0) + (flat[ptr + 1] || 0);
+              ptr += 2;
+            }
+          } else {
+            total += (flat[ptr] || 0) + (flat[ptr + 1] || 0) + (flat[ptr + 2] || 0);
+          }
+        }
+        return total;
+      }
+
+      function getGameStats(game) {
+        let strikes = 0;
+        let strikeOpportunities = 0;
+        let spares = 0;
+        let spareOpportunities = 0;
+        let splits = 0;
+        let splitConverted = 0;
+        let singlePinOpps = 0;
+        let singlePinConverted = 0;
+        let firstBallSum = 0;
+        let firstBallCount = 0;
+
+        game.frames.forEach((frame, fIdx) => {
+          const rolls = frame.rolls;
+          if (rolls.length === 0) return;
+
+          if (fIdx < 9) {
+            strikeOpportunities++;
+            firstBallSum += rolls[0].count;
+            firstBallCount++;
+
+            if (rolls[0].count === 10) {
+              strikes++;
+            } else if (rolls.length >= 2) {
+              spareOpportunities++;
+              const left1 = rolls[0].left;
+              const isSp = isSplitLeave(left1);
+              if (isSp) splits++;
+              if (left1.length === 1) singlePinOpps++;
+
+              if (rolls[0].count + rolls[1].count === 10) {
+                spares++;
+                if (isSp) splitConverted++;
+                if (left1.length === 1) singlePinConverted++;
+              }
+            }
+          } else {
+            // 10th frame stats
+            strikeOpportunities++;
+            firstBallSum += rolls[0].count;
+            firstBallCount++;
+            if (rolls[0].count === 10) {
+              strikes++;
+              if (rolls.length >= 2) {
+                strikeOpportunities++;
+                firstBallSum += rolls[1].count;
+                firstBallCount++;
+                if (rolls[1].count === 10) {
+                  strikes++;
+                  if (rolls.length === 3) {
+                    strikeOpportunities++;
+                    if (rolls[2].count === 10) strikes++;
+                  }
+                } else if (rolls.length === 3) {
+                  spareOpportunities++;
+                  const left2 = rolls[1].left;
+                  const isSp2 = isSplitLeave(left2);
+                  if (isSp2) splits++;
+                  if (left2.length === 1) singlePinOpps++;
+                  if (rolls[1].count + rolls[2].count === 10) {
+                    spares++;
+                    if (isSp2) splitConverted++;
+                    if (left2.length === 1) singlePinConverted++;
+                  }
+                }
+              }
+            } else if (rolls.length >= 2) {
+              spareOpportunities++;
+              const left1 = rolls[0].left;
+              const isSp = isSplitLeave(left1);
+              if (isSp) splits++;
+              if (left1.length === 1) singlePinOpps++;
+              if (rolls[0].count + rolls[1].count === 10) {
+                spares++;
+                if (isSp) splitConverted++;
+                if (left1.length === 1) singlePinConverted++;
+                if (rolls.length === 3) {
+                  strikeOpportunities++;
+                  if (rolls[2].count === 10) strikes++;
+                }
+              }
+            }
+          }
+        });
+
+        return {
+          strikes,
+          strikeOpportunities,
+          spares,
+          spareOpportunities,
+          splits,
+          splitConverted,
+          singlePinOpps,
+          singlePinConverted,
+          firstBallSum,
+          firstBallCount
+        };
+      }
+
+      // ==================== ACTIVE HELPERS ====================
+      function getActiveSeries() {
+        return state.series.find(s => s.id === state.activeSeriesId) || state.series[0] || null;
+      }
+
+      function getActiveGame() {
+        const s = getActiveSeries();
+        if (!s) return null;
+        return s.games.find(g => g.id === state.activeGameId) || s.games[0] || null;
+      }
+
+      function getNextOpenTarget(game) {
+        for (let i = 0; i < 10; i++) {
+          const f = game.frames[i];
+          if (i < 9) {
+            if (f.rolls.length === 0) return { frameIdx: i, rollIdx: 0, standing: ALL_PINS };
+            if (f.rolls.length === 1 && f.rolls[0].count < 10) {
+              return { frameIdx: i, rollIdx: 1, standing: f.rolls[0].left };
+            }
+          } else {
+            if (f.rolls.length === 0) return { frameIdx: 9, rollIdx: 0, standing: ALL_PINS };
+            if (f.rolls.length === 1) {
+              const r1 = f.rolls[0];
+              return { frameIdx: 9, rollIdx: 1, standing: r1.count === 10 ? ALL_PINS : r1.left };
+            }
+            if (f.rolls.length === 2) {
+              const r1 = f.rolls[0];
+              const r2 = f.rolls[1];
+              if (r1.count === 10) {
+                return { frameIdx: 9, rollIdx: 2, standing: r2.count === 10 ? ALL_PINS : r2.left };
+              }
+              if (r1.count + r2.count === 10) {
+                return { frameIdx: 9, rollIdx: 2, standing: ALL_PINS };
+              }
+            }
+          }
+        }
+        return null; // Game complete
+      }
+
+      function getRollContext(game, frameIdx) {
+        const f = game.frames[frameIdx];
+        if (frameIdx < 9) {
+          if (f.rolls.length === 0) return { frameIdx, rollIdx: 0, standing: ALL_PINS, done: false };
+          if (f.rolls.length === 1 && f.rolls[0].count < 10) {
+            return { frameIdx, rollIdx: 1, standing: f.rolls[0].left, done: false };
+          }
+          return { frameIdx, rollIdx: f.rolls.length, standing: [], done: true };
+        } else {
+          if (f.rolls.length === 0) return { frameIdx: 9, rollIdx: 0, standing: ALL_PINS, done: false };
+          if (f.rolls.length === 1) {
+            const r1 = f.rolls[0];
+            return { frameIdx: 9, rollIdx: 1, standing: r1.count === 10 ? ALL_PINS : r1.left, done: false };
+          }
+          if (f.rolls.length === 2) {
+            const r1 = f.rolls[0];
+            const r2 = f.rolls[1];
+            if (r1.count === 10) {
+              return { frameIdx: 9, rollIdx: 2, standing: r2.count === 10 ? ALL_PINS : r2.left, done: false };
+            }
+            if (r1.count + r2.count === 10) {
+              return { frameIdx: 9, rollIdx: 2, standing: ALL_PINS, done: false };
+            }
+            return { frameIdx: 9, rollIdx: 2, standing: [], done: true };
+          }
+          return { frameIdx: 9, rollIdx: 3, standing: [], done: true };
+        }
+      }
+
+      function syncPendingPinsForCurrentFrame() {
+        const game = getActiveGame();
+        if (!game) {
+          state.pendingLeftPins = [];
+          return;
+        }
+        const ctx = getRollContext(game, state.selectedFrameIdx);
+        if (ctx.done) {
+          state.pendingLeftPins = [];
+        } else {
+          // Default to Strike / Spare (0 pins left) so 1-click "Record Roll" works cleanly,
+          // or user taps pins left standing.
+          state.pendingLeftPins = [];
+        }
+      }
+
+      // ==================== TOASTS ====================
+      function showToast(msg, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const el = document.createElement('div');
+        const colors = type === 'success'
+          ? 'bg-emerald-950 border-emerald-600 text-emerald-200'
+          : type === 'error'
+          ? 'bg-rose-950 border-rose-600 text-rose-200'
+          : 'bg-slate-900 border-slate-700 text-slate-200';
+        el.className = `pointer-events-auto px-4 py-2.5 rounded-xl border text-xs sm:text-sm font-medium shadow-xl transition-opacity duration-300 ${colors}`;
+        el.textContent = msg;
+        container.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity = '0';
+          setTimeout(() => el.remove(), 300);
+        }, 2400);
+      }
+
+      // ==================== SCOREBOARD RENDER ====================
+      function formatRollSymbol(frame, rollIdx, frameIdx) {
+        const r = frame.rolls[rollIdx];
+        if (!r) return '';
+        if (frameIdx < 9) {
+          if (rollIdx === 0) {
+            if (r.count === 10) return 'X';
+            const sym = r.count === 0 ? '-' : String(r.count);
+            if (isSplitLeave(r.left)) {
+              return `<span class="split-badge">${sym}</span>`;
+            }
+            return sym;
+          } else {
+            if (frame.rolls[0].count + r.count === 10) return '/';
+            return r.count === 0 ? '-' : String(r.count);
+          }
+        } else {
+          // 10th frame
+          if (rollIdx === 0) {
+            if (r.count === 10) return 'X';
+            const sym = r.count === 0 ? '-' : String(r.count);
+            return isSplitLeave(r.left) ? `<span class="split-badge">${sym}</span>` : sym;
+          }
+          if (rollIdx === 1) {
+            const r0 = frame.rolls[0];
+            if (r0.count === 10) {
+              if (r.count === 10) return 'X';
+              const sym = r.count === 0 ? '-' : String(r.count);
+              return isSplitLeave(r.left) ? `<span class="split-badge">${sym}</span>` : sym;
+            }
+            if (r0.count + r.count === 10) return '/';
+            return r.count === 0 ? '-' : String(r.count);
+          }
+          if (rollIdx === 2) {
+            const r0 = frame.rolls[0];
+            const r1 = frame.rolls[1];
+            const freshRack = (r0.count === 10 && r1.count === 10) || (r0.count < 10 && r0.count + r1.count === 10);
+            if (freshRack) {
+              if (r.count === 10) return 'X';
+              return r.count === 0 ? '-' : String(r.count);
+            } else {
+              if (r1.count + r.count === 10) return '/';
+              return r.count === 0 ? '-' : String(r.count);
+            }
+          }
+        }
+        return '';
+      }
+
+      function renderScorekeeper() {
+        const seriesSelect = document.getElementById('active-series-select');
+        seriesSelect.innerHTML = '';
+        if (state.series.length === 0) {
+          const opt = document.createElement('option');
+          opt.textContent = 'No series yet';
+          seriesSelect.appendChild(opt);
+        } else {
+          state.series.slice().reverse().forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = `${s.title} (${s.date})`;
+            if (s.id === state.activeSeriesId) opt.selected = true;
+            seriesSelect.appendChild(opt);
+          });
+        }
+
+        const series = getActiveSeries();
+        const gameTabs = document.getElementById('series-game-tabs');
+        gameTabs.innerHTML = '';
+
+        if (!series) {
+          document.getElementById('sk-series-total').textContent = '0';
+          document.getElementById('sk-series-avg').textContent = '0.0';
+          document.getElementById('scoreboard-grid').innerHTML = '<div class="col-span-10 p-6 text-center text-sm text-slate-400">Create a new series to start recording scores.</div>';
+          return;
+        }
+
+        let seriesTotal = 0;
+        let completedGames = 0;
+
+        series.games.forEach((g, idx) => {
+          const scored = computeGameScore(g);
+          if (scored.total > 0 || g.frames[0].rolls.length > 0) {
+            seriesTotal += scored.total;
+            completedGames++;
+          }
+          const btn = document.createElement('button');
+          const isActive = g.id === state.activeGameId;
+          btn.className = `px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors border ${
+            isActive
+              ? 'bg-amber-500 text-slate-950 border-amber-400'
+              : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+          }`;
+          btn.textContent = `G${idx + 1}: ${scored.total}`;
+          btn.addEventListener('click', () => {
+            state.activeGameId = g.id;
+            const next = getNextOpenTarget(g);
+            state.selectedFrameIdx = next ? next.frameIdx : 9;
+            syncPendingPinsForCurrentFrame();
+            saveState();
+            renderAll();
+          });
+          gameTabs.appendChild(btn);
+        });
+
+        document.getElementById('sk-series-total').textContent = seriesTotal;
+        document.getElementById('sk-series-avg').textContent = completedGames > 0 ? (seriesTotal / completedGames).toFixed(1) : '0.0';
+
+        const game = getActiveGame();
+        if (!game) return;
+
+        const scored = computeGameScore(game);
+        const gStats = getGameStats(game);
+        const gIdx = series.games.findIndex(g => g.id === game.id);
+
+        document.getElementById('sk-game-title').textContent = `${series.title} — Game ${gIdx + 1}`;
+        const statusBadge = document.getElementById('sk-game-status-badge');
+        if (scored.complete) {
+          statusBadge.textContent = 'Completed';
+          statusBadge.className = 'text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300';
+        } else {
+          statusBadge.textContent = 'In Progress';
+          statusBadge.className = 'text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300';
+        }
+        document.getElementById('sk-max-possible').textContent = scored.maxPossible;
+        document.getElementById('sk-game-strikes').textContent = gStats.strikes;
+        document.getElementById('sk-game-spares').textContent = gStats.spares;
+        document.getElementById('sk-game-splits').textContent = gStats.splits;
+
+        // Render 10-frame grid
+        const grid = document.getElementById('scoreboard-grid');
+        grid.innerHTML = '';
+
+        for (let f = 0; f < 10; f++) {
+          const frame = game.frames[f];
+          const isSelected = f === state.selectedFrameIdx;
+          const cell = document.createElement('button');
+          cell.type = 'button';
+          cell.className = `flex flex-col border-r last:border-r-0 border-slate-800 text-left transition-colors focus:outline-none ${
+            isSelected ? 'bg-slate-800/90 ring-2 ring-inset ring-amber-500' : 'hover:bg-slate-900'
+          }`;
+          cell.addEventListener('click', () => {
+            state.selectedFrameIdx = f;
+            syncPendingPinsForCurrentFrame();
+            renderScorekeeper();
+          });
+
+          const header = document.createElement('div');
+          header.className = `text-[11px] font-bold text-center py-1 border-b border-slate-800 ${
+            isSelected ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-400'
+          }`;
+          header.textContent = f + 1;
+          cell.appendChild(header);
+
+          const rollsRow = document.createElement('div');
+          rollsRow.className = `grid ${f === 9 ? 'grid-cols-3' : 'grid-cols-2'} h-8 border-b border-slate-800/70`;
+
+          const numBoxes = f === 9 ? 3 : 2;
+          for (let r = 0; r < numBoxes; r++) {
+            const rBox = document.createElement('div');
+            rBox.className = 'flex items-center justify-center text-xs font-bold border-r last:border-r-0 border-slate-800/70 text-slate-200';
+            if (f < 9 && r === 0 && frame.rolls[0] && frame.rolls[0].count === 10) {
+              rBox.innerHTML = '';
+            } else if (f < 9 && r === 1 && frame.rolls[0] && frame.rolls[0].count === 10) {
+              rBox.innerHTML = '<span class="text-emerald-400">X</span>';
+            } else {
+              const sym = formatRollSymbol(frame, r, f);
+              if (sym === 'X') rBox.innerHTML = '<span class="text-emerald-400">X</span>';
+              else if (sym === '/') rBox.innerHTML = '<span class="text-sky-400">/</span>';
+              else rBox.innerHTML = sym;
+            }
+            rollsRow.appendChild(rBox);
+          }
+          cell.appendChild(rollsRow);
+
+          const totalBox = document.createElement('div');
+          totalBox.className = 'h-9 flex items-center justify-center text-sm font-extrabold text-white';
+          totalBox.textContent = scored.frameTotals[f] !== null ? scored.frameTotals[f] : '';
+          cell.appendChild(totalBox);
+
+          grid.appendChild(cell);
+        }
+
+        renderPinDeck(game);
+      }
+
+      function renderPinDeck(game) {
+        const ctx = getRollContext(game, state.selectedFrameIdx);
+        const titleEl = document.getElementById('roll-prompt-title');
+        const subEl = document.getElementById('roll-prompt-subtitle');
+
+        if (ctx.done) {
+          titleEl.textContent = `Frame ${ctx.frameIdx + 1} — Complete`;
+          subEl.textContent = 'Frame is complete. Click Undo to re-enter its last roll, or select another frame.';
+        } else {
+          titleEl.textContent = `Frame ${ctx.frameIdx + 1} — Roll ${ctx.rollIdx + 1}`;
+          subEl.textContent = state.tapMode === 'left'
+            ? 'Tap pins LEFT standing after your throw, then click Record Roll.'
+            : 'Tap pins KNOCKED DOWN by your throw, then click Record Roll.';
+        }
+
+        // Update mode toggle buttons
+        const btnLeft = document.getElementById('mode-tap-left');
+        const btnKnocked = document.getElementById('mode-tap-knocked');
+        if (state.tapMode === 'left') {
+          btnLeft.className = 'px-2.5 py-1 rounded-md font-medium bg-slate-800 text-white transition-colors';
+          btnKnocked.className = 'px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-white transition-colors';
+        } else {
+          btnKnocked.className = 'px-2.5 py-1 rounded-md font-medium bg-slate-800 text-white transition-colors';
+          btnLeft.className = 'px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-white transition-colors';
+        }
+
+        // Compute effective left pins based on tapMode
+        const standingSet = new Set(ctx.standing);
+        const clickedSet = new Set(state.pendingLeftPins);
+        const effectiveLeft = ctx.done
+          ? []
+          : state.tapMode === 'left'
+          ? ctx.standing.filter(p => clickedSet.has(p))
+          : ctx.standing.filter(p => !clickedSet.has(p));
+        const leftSet = new Set(effectiveLeft);
+
+        document.querySelectorAll('.pin-btn').forEach(btn => {
+          const pin = Number(btn.dataset.pin);
+          btn.classList.remove('pin-standing', 'pin-knocked', 'pin-disabled');
+          if (ctx.done || !standingSet.has(pin)) {
+            btn.classList.add('pin-disabled');
+            btn.disabled = true;
+          } else {
+            btn.disabled = false;
+            if (leftSet.has(pin)) {
+              btn.classList.add('pin-standing');
+            } else {
+              btn.classList.add('pin-knocked');
+            }
+          }
+        });
+
+        // Update preview readout
+        const knockedCount = ctx.done ? 0 : ctx.standing.length - effectiveLeft.length;
+        document.getElementById('preview-knocked-count').textContent = ctx.done ? '—' : knockedCount;
+
+        let leftLabel = 'None';
+        if (ctx.done) {
+          leftLabel = 'Frame Complete';
+        } else if (effectiveLeft.length === 0) {
+          leftLabel = ctx.standing.length === 10 ? 'None (Strike X)' : 'None (Spare /)';
+        } else {
+          const sorted = effectiveLeft.slice().sort((a, b) => a - b);
+          leftLabel = sorted.join(', ') + (isSplitLeave(sorted) ? ' (Split)' : '');
+        }
+        document.getElementById('preview-left-pins').textContent = leftLabel;
+
+        // Enable/disable quick action buttons
+        const isFreshRack = !ctx.done && ctx.standing.length === 10;
+        const btnStrike = document.getElementById('btn-quick-strike');
+        const btnSpare = document.getElementById('btn-quick-spare');
+        const btnGutter = document.getElementById('btn-quick-gutter');
+        const btnRecord = document.getElementById('btn-record-roll');
+
+        btnStrike.disabled = ctx.done || !isFreshRack;
+        btnStrike.classList.toggle('opacity-40', btnStrike.disabled);
+        btnStrike.classList.toggle('cursor-not-allowed', btnStrike.disabled);
+
+        btnSpare.disabled = ctx.done || isFreshRack;
+        btnSpare.classList.toggle('opacity-40', btnSpare.disabled);
+        btnSpare.classList.toggle('cursor-not-allowed', btnSpare.disabled);
+
+        btnGutter.disabled = ctx.done;
+        btnGutter.classList.toggle('opacity-40', btnGutter.disabled);
+
+        btnRecord.disabled = ctx.done;
+        btnRecord.classList.toggle('opacity-40', btnRecord.disabled);
+
+        // Common leaves only enabled on fresh 10-pin rack
+        document.querySelectorAll('.preset-leave-btn').forEach(b => {
+          b.disabled = ctx.done || !isFreshRack;
+          b.classList.toggle('opacity-35', b.disabled);
+          b.classList.toggle('cursor-not-allowed', b.disabled);
+        });
+      }
+
+      // ==================== MUTATION ACTIONS ====================
+      function commitRoll(leftPinsArray) {
+        const game = getActiveGame();
+        if (!game) return;
+        const ctx = getRollContext(game, state.selectedFrameIdx);
+        if (ctx.done) return;
+
+        const validLeft = leftPinsArray.filter(p => ctx.standing.includes(p)).sort((a, b) => a - b);
+        const roll = makeRollFromLeft(ctx.standing, validLeft);
+        game.frames[ctx.frameIdx].rolls.push(roll);
+
+        // Advance selectedFrameIdx automatically
+        const next = getNextOpenTarget(game);
+        if (next) {
+          state.selectedFrameIdx = next.frameIdx;
+        }
+        syncPendingPinsForCurrentFrame();
+        saveState();
+        renderAll();
+      }
+
+      function undoLastRollInFrame() {
+        const game = getActiveGame();
+        if (!game) return;
+        let fIdx = state.selectedFrameIdx;
+        if (game.frames[fIdx].rolls.length === 0 && fIdx > 0) {
+          // Step back to previous non-empty frame
+          for (let i = fIdx - 1; i >= 0; i--) {
+            if (game.frames[i].rolls.length > 0) {
+              fIdx = i;
+              break;
+            }
+          }
+        }
+        if (game.frames[fIdx].rolls.length > 0) {
+          game.frames[fIdx].rolls.pop();
+          state.selectedFrameIdx = fIdx;
+          syncPendingPinsForCurrentFrame();
+          saveState();
+          renderAll();
+          showToast(`Removed last roll in Frame ${fIdx + 1}`);
+        }
+      }
+
+      // ==================== SERIES LOG RENDER ====================
+      function renderSeriesLog() {
+        const container = document.getElementById('series-list-container');
+        container.innerHTML = '';
+
+        if (state.series.length === 0) {
+          container.innerHTML = `
+            <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 text-center space-y-3">
+              <p class="text-slate-300 font-medium">No bowling series recorded yet.</p>
+              <p class="text-xs text-slate-500">Click "Start New Series" above to log your first game.</p>
+            </div>`;
+          return;
+        }
+
+        state.series.slice().reverse().forEach(s => {
+          let total = 0;
+          let st = 0, stOpp = 0, sp = 0, spOpp = 0, spl = 0;
+          const gameSummaries = s.games.map((g, idx) => {
+            const sc = computeGameScore(g);
+            const gs = getGameStats(g);
+            total += sc.total;
+            st += gs.strikes;
+            stOpp += gs.strikeOpportunities;
+            sp += gs.spares;
+            spOpp += gs.spareOpportunities;
+            spl += gs.splits;
+            return { id: g.id, num: idx + 1, score: sc.total, complete: sc.complete };
+          });
+
+          const avg = s.games.length > 0 ? (total / s.games.length).toFixed(1) : '0.0';
+          const stPct = stOpp > 0 ? ((st / stOpp) * 100).toFixed(0) : '0';
+          const spPct = spOpp > 0 ? ((sp / spOpp) * 100).toFixed(0) : '0';
+          const splPct = stOpp > 0 ? ((spl / stOpp) * 100).toFixed(0) : '0';
+
+          const card = document.createElement('div');
+          card.className = 'bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4';
+
+          const topRow = document.createElement('div');
+          topRow.className = 'flex flex-col sm:flex-row sm:items-center justify-between gap-3';
+          topRow.innerHTML = `
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-base font-bold text-white">${escapeHtml(s.title)}</h3>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">${s.games.length} Games</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(s.date)}${s.alley ? ' • ' + escapeHtml(s.alley) : ''}</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-4">
+              <div class="text-right">
+                <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Series</div>
+                <div class="text-lg font-extrabold text-amber-400">${total} <span class="text-xs font-medium text-slate-400">(${avg} avg)</span></div>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 font-semibold">X ${stPct}%</span>
+                <span class="px-2 py-1 rounded-lg bg-sky-500/10 text-sky-300 font-semibold">/ ${spPct}%</span>
+                <span class="px-2 py-1 rounded-lg bg-rose-500/10 text-rose-300 font-semibold">Split ${splPct}%</span>
+              </div>
+              <button data-delete-series="${s.id}" class="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors" title="Delete Series">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          `;
+          card.appendChild(topRow);
+
+          const gamesRow = document.createElement('div');
+          gamesRow.className = 'grid grid-cols-1 sm:grid-cols-3 gap-2.5';
+          gameSummaries.forEach(gs => {
+            const gBtn = document.createElement('button');
+            gBtn.className = 'flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/50 transition-colors text-left';
+            gBtn.innerHTML = `
+              <div>
+                <div class="text-xs font-semibold text-slate-300">Game ${gs.num}</div>
+                <div class="text-[11px] text-slate-500">${gs.complete ? 'Completed' : 'In Progress'}</div>
+              </div>
+              <div class="text-lg font-extrabold text-white">${gs.score}</div>
+            `;
+            gBtn.addEventListener('click', () => {
+              state.activeSeriesId = s.id;
+              state.activeGameId = gs.id;
+              const targetGame = s.games.find(x => x.id === gs.id);
+              const next = getNextOpenTarget(targetGame);
+              state.selectedFrameIdx = next ? next.frameIdx : 9;
+              syncPendingPinsForCurrentFrame();
+              switchTab('scorekeeper');
+            });
+            gamesRow.appendChild(gBtn);
+          });
+          card.appendChild(gamesRow);
+          container.appendChild(card);
+        });
+
+        // Wire delete buttons
+        container.querySelectorAll('[data-delete-series]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const sid = btn.getAttribute('data-delete-series');
+            state.series = state.series.filter(x => x.id !== sid);
+            if (state.activeSeriesId === sid) {
+              const latest = state.series[state.series.length - 1];
+              state.activeSeriesId = latest ? latest.id : null;
+              state.activeGameId = latest && latest.games[0] ? latest.games[0].id : null;
+            }
+            saveState();
+            renderAll();
+            showToast('Series deleted');
+          });
+        });
+
+        if (window.lucide) lucide.createIcons();
+      }
+
+      // ==================== STATS & TRENDS RENDER ====================
+      function renderStatsAndTrends() {
+        const scope = document.getElementById('stats-scope-select').value;
+        const scopedSeries = scope === 'last3' ? state.series.slice(-3) : state.series.slice();
+
+        let totalGames = 0;
+        let totalPins = 0;
+        let highGame = 0;
+        let highSeries = 0;
+
+        let strikes = 0, strikeOpps = 0;
+        let spares = 0, spareOpps = 0;
+        let splits = 0, splitConv = 0;
+        let singleOpps = 0, singleConv = 0;
+        let firstSum = 0, firstCount = 0;
+
+        // Pin leave tracking
+        const pinLeaveCounts = {};
+        ALL_PINS.forEach(p => { pinLeaveCounts[p] = 0; });
+        let totalNonStrikeFirstBalls = 0;
+        const comboStats = {}; // key: "10" or "7,10" -> { count, converted }
+
+        const gameTrendLabels = [];
+        const gameTrendScores = [];
+        const seriesTrendLabels = [];
+        const seriesStrikePcts = [];
+        const seriesSparePcts = [];
+        const seriesSplitPcts = [];
+
+        scopedSeries.forEach((s, sIdx) => {
+          let sTotal = 0;
+          let sSt = 0, sStOpp = 0, sSp = 0, sSpOpp = 0, sSpl = 0;
+
+          s.games.forEach((g, gIdx) => {
+            const hasRolls = g.frames[0].rolls.length > 0;
+            if (!hasRolls) return;
+
+            const sc = computeGameScore(g);
+            const gs = getGameStats(g);
+            totalGames++;
+            totalPins += sc.total;
+            sTotal += sc.total;
+            if (sc.total > highGame) highGame = sc.total;
+
+            strikes += gs.strikes;
+            strikeOpps += gs.strikeOpportunities;
+            spares += gs.spares;
+            spareOpps += gs.spareOpportunities;
+            splits += gs.splits;
+            splitConv += gs.splitConverted;
+            singleOpps += gs.singlePinOpps;
+            singleConv += gs.singlePinConverted;
+            firstSum += gs.firstBallSum;
+            firstCount += gs.firstBallCount;
+
+            sSt += gs.strikes;
+            sStOpp += gs.strikeOpportunities;
+            sSp += gs.spares;
+            sSpOpp += gs.spareOpportunities;
+            sSpl += gs.splits;
+
+            gameTrendLabels.push(`${s.date.slice(5)} G${gIdx + 1}`);
+            gameTrendScores.push(sc.total);
+
+            // Pin-level leaves (Frames 1-9 roll 0, Frame 10 roll 0 & roll 1 if roll 0 was strike)
+            g.frames.forEach((frame, fIdx) => {
+              if (frame.rolls.length === 0) return;
+              if (fIdx < 9) {
+                const r0 = frame.rolls[0];
+                if (r0.count < 10 && r0.left.length > 0) {
+                  totalNonStrikeFirstBalls++;
+                  r0.left.forEach(p => { pinLeaveCounts[p]++; });
+                  const key = r0.left.join(',');
+                  if (!comboStats[key]) comboStats[key] = { count: 0, converted: 0, isSplit: isSplitLeave(r0.left) };
+                  comboStats[key].count++;
+                  if (frame.rolls.length >= 2 && r0.count + frame.rolls[1].count === 10) {
+                    comboStats[key].converted++;
+                  }
+                }
+              } else {
+                const r0 = frame.rolls[0];
+                if (r0.count < 10 && r0.left.length > 0) {
+                  totalNonStrikeFirstBalls++;
+                  r0.left.forEach(p => { pinLeaveCounts[p]++; });
+                  const key = r0.left.join(',');
+                  if (!comboStats[key]) comboStats[key] = { count: 0, converted: 0, isSplit: isSplitLeave(r0.left) };
+                  comboStats[key].count++;
+                  if (frame.rolls.length >= 2 && r0.count + frame.rolls[1].count === 10) {
+                    comboStats[key].converted++;
+                  }
+                } else if (r0.count === 10 && frame.rolls.length >= 2 && frame.rolls[1].count < 10 && frame.rolls[1].left.length > 0) {
+                  const r1 = frame.rolls[1];
+                  totalNonStrikeFirstBalls++;
+                  r1.left.forEach(p => { pinLeaveCounts[p]++; });
+                  const key = r1.left.join(',');
+                  if (!comboStats[key]) comboStats[key] = { count: 0, converted: 0, isSplit: isSplitLeave(r1.left) };
+                  comboStats[key].count++;
+                  if (frame.rolls.length === 3 && r1.count + frame.rolls[2].count === 10) {
+                    comboStats[key].converted++;
+                  }
+                }
+              }
+            });
+          });
+
+          if (sTotal > highSeries) highSeries = sTotal;
+          if (sStOpp > 0) {
+            seriesTrendLabels.push(`${s.date.slice(5)} (${s.title.slice(0, 10)})`);
+            seriesStrikePcts.push(Number(((sSt / sStOpp) * 100).toFixed(1)));
+            seriesSparePcts.push(sSpOpp > 0 ? Number(((sSp / sSpOpp) * 100).toFixed(1)) : 0);
+            seriesSplitPcts.push(Number(((sSpl / sStOpp) * 100).toFixed(1)));
+          }
+        });
+
+        // Update KPIs
+        document.getElementById('stat-avg').textContent = totalGames > 0 ? (totalPins / totalGames).toFixed(1) : '0.0';
+        document.getElementById('stat-games-count').textContent = `${totalGames} game${totalGames === 1 ? '' : 's'}`;
+        document.getElementById('stat-highs').textContent = `${highGame} / ${highSeries}`;
+
+        const stPct = strikeOpps > 0 ? ((strikes / strikeOpps) * 100).toFixed(1) : '0.0';
+        document.getElementById('stat-strike-pct').textContent = `${stPct}%`;
+        document.getElementById('stat-strike-sub').textContent = `${strikes} / ${strikeOpps} frames`;
+
+        const spPct = spareOpps > 0 ? ((spares / spareOpps) * 100).toFixed(1) : '0.0';
+        document.getElementById('stat-spare-pct').textContent = `${spPct}%`;
+        document.getElementById('stat-spare-sub').textContent = `${spares} / ${spareOpps} opps`;
+
+        const splPct = strikeOpps > 0 ? ((splits / strikeOpps) * 100).toFixed(1) : '0.0';
+        const splConvPct = splits > 0 ? ((splitConv / splits) * 100).toFixed(0) : '0';
+        document.getElementById('stat-split-pct').textContent = `${splPct}%`;
+        document.getElementById('stat-split-sub').textContent = `${splits} splits (${splConvPct}% conv)`;
+
+        const singlePct = singleOpps > 0 ? ((singleConv / singleOpps) * 100).toFixed(1) : '0.0';
+        const firstAvg = firstCount > 0 ? (firstSum / firstCount).toFixed(2) : '0.00';
+        document.getElementById('stat-single-pin-pct').textContent = `${singlePct}%`;
+        document.getElementById('stat-first-ball').textContent = `1st ball avg: ${firstAvg}`;
+
+        // Render Pin Leave Heatmap
+        renderHeatmapDeck(pinLeaveCounts, totalNonStrikeFirstBalls);
+
+        // Render Top Individual Pins
+        const indivContainer = document.getElementById('top-individual-pins');
+        indivContainer.innerHTML = '';
+        const sortedPins = ALL_PINS
+          .map(p => ({ pin: p, count: pinLeaveCounts[p] }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 6);
+
+        if (totalNonStrikeFirstBalls === 0) {
+          indivContainer.innerHTML = '<p class="text-xs text-slate-500">No non-strike first balls recorded yet.</p>';
+        } else {
+          const maxPinCount = Math.max(...sortedPins.map(x => x.count), 1);
+          sortedPins.forEach(item => {
+            const pctOfNonStrike = ((item.count / totalNonStrikeFirstBalls) * 100).toFixed(0);
+            const widthPct = Math.round((item.count / maxPinCount) * 100);
+            const row = document.createElement('div');
+            row.className = 'space-y-1';
+            row.innerHTML = `
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-semibold text-slate-200">Pin ${item.pin}</span>
+                <span class="text-slate-400">${item.count}× <span class="text-slate-500">(${pctOfNonStrike}% of leaves)</span></span>
+              </div>
+              <div class="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
+                <div class="h-full rounded-full bg-gradient-to-r from-amber-500 to-rose-500" style="width: ${widthPct}%"></div>
+              </div>
+            `;
+            indivContainer.appendChild(row);
+          });
+        }
+
+        // Render Top Leave Combos
+        const comboContainer = document.getElementById('top-leave-combos');
+        comboContainer.innerHTML = '';
+        const sortedCombos = Object.entries(comboStats)
+          .map(([key, val]) => ({ key, ...val }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 6);
+
+        if (sortedCombos.length === 0) {
+          comboContainer.innerHTML = '<p class="text-xs text-slate-500">No spare leaves recorded yet.</p>';
+        } else {
+          sortedCombos.forEach(c => {
+            const convPct = c.count > 0 ? ((c.converted / c.count) * 100).toFixed(0) : '0';
+            const label = c.key.includes(',') ? `Pins ${c.key.replace(/,/g, '-')}` : `${c.key}-Pin`;
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs';
+            row.innerHTML = `
+              <div class="flex items-center gap-2">
+                <span class="font-semibold ${c.isSplit ? 'text-rose-300' : 'text-slate-200'}">${label}</span>
+                ${c.isSplit ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-semibold">Split</span>' : ''}
+              </div>
+              <div class="text-slate-400">
+                <strong class="text-white">${c.count}×</strong> • ${convPct}% spared
+              </div>
+            `;
+            comboContainer.appendChild(row);
+          });
+        }
+
+        renderCharts(gameTrendLabels, gameTrendScores, seriesTrendLabels, seriesStrikePcts, seriesSparePcts, seriesSplitPcts);
+      }
+
+      function renderHeatmapDeck(pinLeaveCounts, totalNonStrike) {
+        const container = document.getElementById('heatmap-pin-deck');
+        container.innerHTML = '';
+        const maxCount = Math.max(...Object.values(pinLeaveCounts), 1);
+
+        const rows = [
+          [7, 8, 9, 10],
+          [4, 5, 6],
+          [2, 3],
+          [1]
+        ];
+
+        rows.forEach(r => {
+          const rowDiv = document.createElement('div');
+          rowDiv.className = 'flex items-center justify-center gap-3';
+          r.forEach(pin => {
+            const count = pinLeaveCounts[pin] || 0;
+            const ratio = totalNonStrike > 0 ? count / maxCount : 0;
+            const pct = totalNonStrike > 0 ? ((count / totalNonStrike) * 100).toFixed(0) : '0';
+
+            let colorClass = 'bg-slate-800/80 border-slate-700 text-slate-300';
+            if (count > 0) {
+              if (ratio >= 0.75) colorClass = 'bg-rose-500 border-rose-300 text-white shadow-lg shadow-rose-500/25';
+              else if (ratio >= 0.45) colorClass = 'bg-orange-500/80 border-orange-300 text-white';
+              else if (ratio >= 0.2) colorClass = 'bg-amber-500/45 border-amber-400/60 text-amber-100';
+            }
+
+            const el = document.createElement('div');
+            el.className = `w-12 h-12 rounded-full border-2 flex flex-col items-center justify-center ${colorClass}`;
+            el.innerHTML = `
+              <span class="text-xs font-extrabold leading-none">${pin}</span>
+              <span class="text-[10px] opacity-90 leading-tight mt-0.5">${pct}%</span>
+            `;
+            el.title = `Pin ${pin}: left ${count} times (${pct}% of non-strike first balls)`;
+            rowDiv.appendChild(el);
+          });
+          container.appendChild(rowDiv);
+        });
+      }
+
+      function renderCharts(gameLabels, gameScores, seriesLabels, strikePcts, sparePcts, splitPcts) {
+        if (!window.Chart) return;
+
+        // Rolling 3-game average
+        const rollingAvg = gameScores.map((_, idx) => {
+          const slice = gameScores.slice(Math.max(0, idx - 2), idx + 1);
+          const avg = slice.reduce((a, b) => a + b, 0) / slice.length;
+          return Number(avg.toFixed(1));
+        });
+
+        const ctxScores = document.getElementById('chart-scores').getContext('2d');
+        if (scoreChartInstance) scoreChartInstance.destroy();
+        scoreChartInstance = new Chart(ctxScores, {
+          type: 'line',
+          data: {
+            labels: gameLabels,
+            datasets: [
+              {
+                label: 'Game Score',
+                data: gameScores,
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                borderWidth: 2.5,
+                tension: 0.3,
+                fill: true,
+                pointRadius: 4
+              },
+              {
+                label: '3-Game Rolling Avg',
+                data: rollingAvg,
+                borderColor: '#38bdf8',
+                borderDash: [5, 5],
+                borderWidth: 2,
+                tension: 0.3,
+                pointRadius: 0
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: '#cbd5e1', font: { size: 11 } } }
+            },
+            scales: {
+              x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(51, 65, 85, 0.35)' } },
+              y: { min: 0, max: 300, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(51, 65, 85, 0.35)' } }
+            }
+          }
+        });
+
+        const ctxPct = document.getElementById('chart-percentages').getContext('2d');
+        if (pctChartInstance) pctChartInstance.destroy();
+        pctChartInstance = new Chart(ctxPct, {
+          type: 'line',
+          data: {
+            labels: seriesLabels,
+            datasets: [
+              {
+                label: 'Strike %',
+                data: strikePcts,
+                borderColor: '#34d399',
+                backgroundColor: '#34d399',
+                borderWidth: 2.5,
+                tension: 0.25
+              },
+              {
+                label: 'Spare %',
+                data: sparePcts,
+                borderColor: '#38bdf8',
+                backgroundColor: '#38bdf8',
+                borderWidth: 2.5,
+                tension: 0.25
+              },
+              {
+                label: 'Split %',
+                data: splitPcts,
+                borderColor: '#fb7185',
+                backgroundColor: '#fb7185',
+                borderWidth: 2,
+                tension: 0.25
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: '#cbd5e1', font: { size: 11 } } }
+            },
+            scales: {
+              x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(51, 65, 85, 0.35)' } },
+              y: { min: 0, max: 100, ticks: { color: '#94a3b8', font: { size: 10 }, callback: v => v + '%' }, grid: { color: 'rgba(51, 65, 85, 0.35)' } }
+            }
+          }
+        });
+      }
+
+      // ==================== TAB SWITCHING ====================
+      function switchTab(tabName) {
+        state.activeTab = tabName;
+        ['scorekeeper', 'series', 'trends'].forEach(t => {
+          document.getElementById('view-' + t).classList.toggle('hidden', t !== tabName);
+          const btn = document.getElementById('tab-' + t);
+          if (t === tabName) {
+            btn.className = 'nav-tab px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors bg-amber-500 text-slate-950';
+          } else {
+            btn.className = 'nav-tab px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors text-slate-300 hover:text-white';
+          }
+        });
+        renderAll();
+      }
+
+      function renderAll() {
+        if (state.activeTab === 'scorekeeper') renderScorekeeper();
+        else if (state.activeTab === 'series') renderSeriesLog();
+        else if (state.activeTab === 'trends') renderStatsAndTrends();
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, m => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+      }
+
+      // ==================== EVENT WIRING ====================
+      function initEvents() {
+        document.querySelectorAll('.nav-tab').forEach(btn => {
+          btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        // Series dropdown change
+        document.getElementById('active-series-select').addEventListener('change', (e) => {
+          state.activeSeriesId = e.target.value;
+          const s = getActiveSeries();
+          if (s && s.games[0]) {
+            state.activeGameId = s.games[0].id;
+            const next = getNextOpenTarget(s.games[0]);
+            state.selectedFrameIdx = next ? next.frameIdx : 9;
+          }
+          syncPendingPinsForCurrentFrame();
+          saveState();
+          renderAll();
+        });
+
+        // Pin deck clicks
+        document.querySelectorAll('.pin-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const game = getActiveGame();
+            if (!game) return;
+            const ctx = getRollContext(game, state.selectedFrameIdx);
+            if (ctx.done) return;
+
+            const pin = Number(btn.dataset.pin);
+            if (!ctx.standing.includes(pin)) return;
+
+            const idx = state.pendingLeftPins.indexOf(pin);
+            if (idx >= 0) {
+              state.pendingLeftPins.splice(idx, 1);
+            } else {
+              state.pendingLeftPins.push(pin);
+            }
+            renderPinDeck(game);
+          });
+        });
+
+        // Tap mode toggles
+        document.getElementById('mode-tap-left').addEventListener('click', () => {
+          if (state.tapMode === 'left') return;
+          const g = getActiveGame();
+          if (g) {
+            const ctx = getRollContext(g, state.selectedFrameIdx);
+            const clicked = new Set(state.pendingLeftPins);
+            state.pendingLeftPins = ctx.standing.filter(p => !clicked.has(p));
+          }
+          state.tapMode = 'left';
+          if (g) renderPinDeck(g);
+        });
+        document.getElementById('mode-tap-knocked').addEventListener('click', () => {
+          if (state.tapMode === 'knocked') return;
+          const g = getActiveGame();
+          if (g) {
+            const ctx = getRollContext(g, state.selectedFrameIdx);
+            const clicked = new Set(state.pendingLeftPins);
+            state.pendingLeftPins = ctx.standing.filter(p => !clicked.has(p));
+          }
+          state.tapMode = 'knocked';
+          if (g) renderPinDeck(g);
+        });
+
+        // Record roll
+        document.getElementById('btn-record-roll').addEventListener('click', () => {
+          const game = getActiveGame();
+          if (!game) return;
+          const ctx = getRollContext(game, state.selectedFrameIdx);
+          if (ctx.done) return;
+
+          if (state.tapMode === 'left') {
+            commitRoll(state.pendingLeftPins);
+          } else {
+            // In 'knocked' mode, pendingLeftPins holds the pins the user tapped; wait:
+            // let's make tapMode consistent: clicking a pin toggles it in pendingLeftPins,
+            // OR in 'knocked' mode, the user clicks pins they knocked down, so left = standing minus clicked!
+            const clickedSet = new Set(state.pendingLeftPins);
+            const actualLeft = ctx.standing.filter(p => !clickedSet.has(p));
+            commitRoll(actualLeft);
+          }
+        });
+
+        document.getElementById('btn-undo-roll').addEventListener('click', undoLastRollInFrame);
+
+        // Quick buttons
+        document.getElementById('btn-quick-strike').addEventListener('click', () => commitRoll([]));
+        document.getElementById('btn-quick-spare').addEventListener('click', () => commitRoll([]));
+        document.getElementById('btn-quick-gutter').addEventListener('click', () => {
+          const game = getActiveGame();
+          if (!game) return;
+          const ctx = getRollContext(game, state.selectedFrameIdx);
+          if (!ctx.done) commitRoll(ctx.standing);
+        });
+
+        // Common leaves 1-tap
+        document.querySelectorAll('.preset-leave-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const pins = btn.dataset.leave.split(',').map(Number);
+            commitRoll(pins);
+          });
+        });
+
+        // Clear current game
+        document.getElementById('btn-clear-game').addEventListener('click', () => {
+          const game = getActiveGame();
+          if (!game) return;
+          game.frames = Array.from({ length: 10 }, () => ({ rolls: [] }));
+          state.selectedFrameIdx = 0;
+          syncPendingPinsForCurrentFrame();
+          saveState();
+          renderAll();
+          showToast('Current game cleared');
+        });
+
+        // Add game to series
+        document.getElementById('btn-add-game').addEventListener('click', () => {
+          const series = getActiveSeries();
+          if (!series) return;
+          const newGame = createEmptyGame(series.games.length + 1);
+          series.games.push(newGame);
+          state.activeGameId = newGame.id;
+          state.selectedFrameIdx = 0;
+          syncPendingPinsForCurrentFrame();
+          saveState();
+          renderAll();
+          showToast(`Added Game ${series.games.length} to ${series.title}`, 'success');
+        });
+
+        // New Series Modal
+        const modalNew = document.getElementById('modal-new-series');
+        const openNewModal = () => {
+          document.getElementById('input-series-date').value = new Date().toISOString().slice(0, 10);
+          modalNew.classList.remove('hidden');
+        };
+        document.getElementById('btn-new-series-modal').addEventListener('click', openNewModal);
+        document.getElementById('btn-new-series-log').addEventListener('click', openNewModal);
+        document.getElementById('close-new-series-modal').addEventListener('click', () => modalNew.classList.add('hidden'));
+        document.getElementById('cancel-new-series').addEventListener('click', () => modalNew.classList.add('hidden'));
+
+        document.getElementById('form-new-series').addEventListener('submit', (e) => {
+          e.preventDefault();
+          const title = document.getElementById('input-series-title').value.trim() || 'Bowling Session';
+          const date = document.getElementById('input-series-date').value || new Date().toISOString().slice(0, 10);
+          const alley = document.getElementById('input-series-alley').value.trim();
+          const count = Number(document.getElementById('input-series-games').value) || 3;
+
+          const newSeries = {
+            id: 's_' + Math.random().toString(36).slice(2, 10),
+            title,
+            date,
+            alley,
+            games: Array.from({ length: count }, (_, idx) => createEmptyGame(idx + 1))
+          };
+          state.series.push(newSeries);
+          state.activeSeriesId = newSeries.id;
+          state.activeGameId = newSeries.games[0].id;
+          state.selectedFrameIdx = 0;
+          syncPendingPinsForCurrentFrame();
+          saveState();
+          modalNew.classList.add('hidden');
+          document.getElementById('form-new-series').reset();
+          switchTab('scorekeeper');
+          showToast(`Created "${title}" (${count} games)`, 'success');
+        });
+
+        // Stats Scope filter
+        document.getElementById('stats-scope-select').addEventListener('change', renderStatsAndTrends);
+
+        // Data Modal
+        const modalData = document.getElementById('modal-data');
+        document.getElementById('btn-open-data-modal').addEventListener('click', () => modalData.classList.remove('hidden'));
+        document.getElementById('close-data-modal').addEventListener('click', () => modalData.classList.add('hidden'));
+
+        document.getElementById('btn-export-json').addEventListener('click', () => {
+          const blob = new Blob([JSON.stringify({ series: state.series }, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `pinpoint-bowling-${new Date().toISOString().slice(0, 10)}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('Exported JSON backup', 'success');
+        });
+
+        document.getElementById('input-import-json').addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const parsed = JSON.parse(reader.result);
+              if (parsed && Array.isArray(parsed.series)) {
+                state.series = parsed.series;
+                const latest = state.series[state.series.length - 1];
+                state.activeSeriesId = latest ? latest.id : null;
+                state.activeGameId = latest && latest.games[0] ? latest.games[0].id : null;
+                state.selectedFrameIdx = 0;
+                syncPendingPinsForCurrentFrame();
+                saveState();
+                modalData.classList.add('hidden');
+                renderAll();
+                showToast('Imported bowling data', 'success');
+              } else {
+                showToast('Invalid JSON format', 'error');
+              }
+            } catch (err) {
+              showToast('Could not parse JSON file', 'error');
+            }
+          };
+          reader.readAsText(file);
+        });
+
+        document.getElementById('btn-restore-sample').addEventListener('click', () => {
+          const sample = getSampleData();
+          state.series = sample.series;
+          const latest = state.series[state.series.length - 1];
+          state.activeSeriesId = latest.id;
+          state.activeGameId = latest.games[0].id;
+          state.selectedFrameIdx = 0;
+          syncPendingPinsForCurrentFrame();
+          saveState();
+          modalData.classList.add('hidden');
+          renderAll();
+          showToast('Loaded sample season data', 'success');
+        });
+
+        document.getElementById('btn-wipe-all').addEventListener('click', () => {
+          const freshSeries = {
+            id: 's_' + Math.random().toString(36).slice(2, 10),
+            title: 'My First Series',
+            date: new Date().toISOString().slice(0, 10),
+            alley: '',
+            games: [createEmptyGame(1), createEmptyGame(2), createEmptyGame(3)]
+          };
+          state.series = [freshSeries];
+          state.activeSeriesId = freshSeries.id;
+          state.activeGameId = freshSeries.games[0].id;
+          state.selectedFrameIdx = 0;
+          syncPendingPinsForCurrentFrame();
+          saveState();
+          modalData.classList.add('hidden');
+          switchTab('scorekeeper');
+          showToast('Cleared sample data — ready for your scores!', 'success');
+        });
+      }
+
+      // ==================== INIT ====================
+      loadState();
+      const activeG = getActiveGame();
+      if (activeG) {
+        const next = getNextOpenTarget(activeG);
+        state.selectedFrameIdx = next ? next.frameIdx : 9;
+      }
+      syncPendingPinsForCurrentFrame();
+      initEvents();
+      renderAll();
+    })();
+  </script>
+</body>
+</html>
